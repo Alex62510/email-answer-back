@@ -1,0 +1,30 @@
+{
+  "name": "email-answer-back",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node server.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Alex62510/email-answer-back.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/Alex62510/email-answer-back/issues"
+  },
+  "homepage": "https://github.com/Alex62510/email-answer-back#readme",
+  "dependencies": {
+    "child_process": "^1.0.2",
+    "cloudconvert": "^3.0.0",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.3",
+    "express": "^5.1.0",
+    "multer": "^2.0.2"
+  }
+}
