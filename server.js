@@ -1,86 +1,56 @@
-const express = require("express");
-const fs = require("fs");
-const path = require("path");
-const CloudConvert = require("cloudconvert");
-const cors = require("cors");
+// server.js
+import express from 'express';
+import cors from 'cors';
+import dotenv from 'dotenv';
+import path from 'path';
+import fs from 'fs';
+import { startBot, addSseClient, confirmPendingMail, getPendingMail } from './mailBot.js';
 
-require('dotenv').config();
+dotenv.config();
+
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-app.use(cors());
 app.use(express.json());
 
-const UPLOAD_DIR = path.join(__dirname, "uploads");
-const PDF_DIR = path.join(__dirname, "pdfs");
+app.use(cors({
+    origin: 'http://localhost:3000',
+    methods: ['GET', 'POST'],
+    credentials: true
+}));
 
-// Создаем папки если нет
-if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR);
-if (!fs.existsSync(PDF_DIR)) fs.mkdirSync(PDF_DIR);
+// SSE
+app.get('/sse', (req, res) => addSseClient(res));
 
-// Инициализация CloudConvert
-const cloudConvert = new CloudConvert(process.env.CLOUDCONVERT_API_KEY);
+// Подтверждение письма
+app.post('/confirm-pdf', async (req, res) => {
+    const success = await confirmPendingMail();
+    res.json({ success });
+});
 
-// Вспомогательная функция: конвертация через CloudConvert
-async function convertDocToPdf(docPath) {
-    const pdfPath = path.join(
-        PDF_DIR,
-        path.basename(docPath, ".doc") + ".pdf"
-    );
+// Запуск бота
+startBot({ email: process.env.IMAP_USER, password: process.env.IMAP_PASS });
 
-    if (fs.existsSync(pdfPath)) return pdfPath;
+// Отдаём последнюю PDF
+app.get('/latest-pdf', (req, res) => {
+    const pending = getPendingMail();
 
-    const job = await cloudConvert.jobs.create({
-        tasks: {
-            import_doc: { operation: "import/upload" },
-            convert_to_pdf: {
-                operation: "convert",
-                input: "import_doc",
-                input_format: "doc",
-                output_format: "pdf"
-            },
-            export_pdf: { operation: "export/url", input: "convert_to_pdf" }
-        }
-    });
-
-    const importTask = job.tasks.find(t => t.name === "import_doc");
-    await cloudConvert.tasks.upload(importTask, fs.createReadStream(docPath), path.basename(docPath));
-    const completedJob = await cloudConvert.jobs.wait(job.id);
-
-    const exportTask = completedJob.tasks.find(t => t.operation === "export/url");
-    const pdfUrl = exportTask.result.files[0].url;
-
-    // Сохраняем PDF локально
-    const response = await fetch(pdfUrl);
-    const buffer = await response.arrayBuffer();
-    fs.writeFileSync(pdfPath, Buffer.from(buffer));
-
-    return pdfPath;
-}
-
-// GET /pdf — возвращает PDF одного документа в uploads
-app.get("/pdf", async (req, res) => {
-    const files = fs.readdirSync(UPLOAD_DIR).filter(f => f.endsWith(".doc"));
-
-    if (files.length === 0) return res.status(404).json({ error: "No DOC files found" });
-
-    const docPath = path.join(UPLOAD_DIR, files[0]);
-
-    try {
-        const pdfPath = await convertDocToPdf(docPath);
-
-        res.setHeader("Content-Type", "application/pdf");
-        res.setHeader(
-            "Content-Disposition",
-            `inline; filename="${path.basename(pdfPath)}"`
-        );
-        res.sendFile(pdfPath);
-    } catch (err) {
-        console.error("Conversion error:", err);
-        res.status(500).json({ error: "Conversion failed" });
+    if (!pending || !pending.attachment || !fs.existsSync(PDF_PATH)) {
+        return res.status(404).json({ message: "PDF ещё не готов" });
     }
+
+    res.json({ pdfUrl: `/pdf/${path.basename(PDF_PATH)}` });
 });
 
-app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
+// Отдаём сам PDF
+app.get('/pdf/:filename', (req, res) => {
+    const filename = req.params.filename;
+    const filePath = path.resolve(`./${filename}`);
+
+    if (!fs.existsSync(filePath)) return res.status(404).send("Файл не найден");
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.sendFile(filePath);
 });
+
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
