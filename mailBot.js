@@ -50,7 +50,7 @@ export function startBot({ email, password }) {
     imap.once('ready', () => {
         console.log(`📥 IMAP connected as ${email}`);
         checkMail();
-        setInterval(checkMail, 30_000);
+        setInterval(checkMail, 300_000);
     });
 
     imap.once('error', err => console.error('❌ IMAP error:', err));
